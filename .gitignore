@@ -1,0 +1,11 @@
+# bot state (contains chat ids)
+state.json
+state.enc
+.state-*
+
+# local secrets
+.env
+
+# build output
+/signalbot
+*.exe

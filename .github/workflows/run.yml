@@ -1,0 +1,58 @@
+name: Signal bot (hourly)
+
+on:
+  schedule:
+    - cron: "2 * * * *" # every hour, 2 minutes after candles close
+  workflow_dispatch: # "Run workflow" button for an immediate run
+
+permissions:
+  contents: write # to save the encrypted state on the `state` branch
+
+concurrency:
+  group: signal-bot
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Restore state
+        run: |
+          if git fetch --depth=1 origin state 2>/dev/null; then
+            git show FETCH_HEAD:state.enc > state.enc
+            echo "State restored."
+          else
+            echo "No saved state yet (first run)."
+          fi
+
+      - name: Run bot
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          ADMIN_CHAT_ID: ${{ secrets.ADMIN_CHAT_ID }}
+          STATE_KEY: ${{ secrets.STATE_KEY }}
+          TIMEZONE: ${{ vars.TIMEZONE }}
+          BINANCE_BASE_URL: ${{ vars.BINANCE_BASE_URL }}
+          OPEN_ACCESS: ${{ vars.OPEN_ACCESS }}
+        run: go run ./cmd/signalbot -mode once -state state.enc
+
+      - name: Save state
+        if: always() && hashFiles('state.enc') != ''
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          dir=$(mktemp -d)
+          cp state.enc "$dir/"
+          cd "$dir"
+          git init -q -b state
+          git config user.name "signal-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.enc
+          git commit -qm "Update bot state"
+          git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" state
