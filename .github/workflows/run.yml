@@ -2,7 +2,7 @@ name: Signal bot (hourly)
 
 on:
   schedule:
-    - cron: "2 * * * *" # every hour, 2 minutes after candles close
+    - cron: "7 * * * *" # every hour at :07 (minutes near :00 are often dropped by GitHub under load)
   workflow_dispatch: # "Run workflow" button for an immediate run
 
 permissions:
