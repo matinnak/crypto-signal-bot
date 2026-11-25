@@ -20,7 +20,9 @@ type Config struct {
 	TelegramURL   string // override for tests; default https://api.telegram.org
 	Location      *time.Location
 	OpenAccess    bool
-	OnCI          bool // running inside GitHub Actions
+	OnCI          bool   // running inside GitHub Actions
+	Strategy      string // "mtf_macd" = run only the built-in BTC 3h strategy
+	FuturesURL    string // Binance USDT-M futures endpoint (fixed strategy)
 }
 
 // FromEnv loads the configuration.
@@ -31,6 +33,7 @@ type Config struct {
 //	BINANCE_BASE_URL  optional, default https://data-api.binance.vision
 //	TIMEZONE          optional, default Asia/Tehran
 //	OPEN_ACCESS       optional, "true" lets anyone use the bot without approval
+//	STRATEGY          optional, "mtf_macd" runs only the built-in BTCUSDT 3h strategy
 func FromEnv() (*Config, error) {
 	c := &Config{
 		TelegramToken: strings.TrimSpace(os.Getenv("TELEGRAM_TOKEN")),
@@ -39,6 +42,8 @@ func FromEnv() (*Config, error) {
 		TelegramURL:   strings.TrimSpace(os.Getenv("TELEGRAM_API_URL")),
 		OpenAccess:    strings.EqualFold(os.Getenv("OPEN_ACCESS"), "true"),
 		OnCI:          os.Getenv("GITHUB_ACTIONS") == "true",
+		Strategy:      strings.ToLower(strings.TrimSpace(os.Getenv("STRATEGY"))),
+		FuturesURL:    strings.TrimSpace(os.Getenv("BINANCE_FUTURES_URL")),
 	}
 	var errs []error
 	if c.TelegramToken == "" {
@@ -50,6 +55,9 @@ func FromEnv() (*Config, error) {
 		errs = append(errs, fmt.Errorf("ADMIN_CHAT_ID must be a number, got %q", v))
 	} else {
 		c.AdminChatID = id
+	}
+	if c.Strategy != "" && c.Strategy != "mtf_macd" {
+		errs = append(errs, fmt.Errorf("unknown STRATEGY %q (supported: mtf_macd)", c.Strategy))
 	}
 	if c.OnCI && c.StateKey == "" {
 		errs = append(errs, errors.New("STATE_KEY must be set on GitHub Actions so the saved state is encrypted"))

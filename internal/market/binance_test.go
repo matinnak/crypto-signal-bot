@@ -69,3 +69,25 @@ func TestNormalize(t *testing.T) {
 		}
 	}
 }
+
+func TestAggregate3h(t *testing.T) {
+	base := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC) // starts mid-group: 01:00
+	var h1 []Candle
+	for i := 0; i < 8; i++ { // 01:00 .. 08:00
+		o := base.Add(time.Duration(i) * time.Hour)
+		p := float64(i + 1)
+		h1 = append(h1, Candle{OpenTime: o, CloseTime: o.Add(time.Hour - time.Millisecond), Open: p, High: p + 0.5, Low: p - 0.5, Close: p, Volume: 1})
+	}
+	got := Aggregate(h1, 3*time.Hour)
+	// groups: [01,02] incomplete, [03,04,05] complete, [06,07,08] complete
+	if len(got) != 2 {
+		t.Fatalf("expected 2 complete 3h candles, got %d", len(got))
+	}
+	g := got[0]
+	if g.OpenTime.Hour() != 3 || g.Open != 3 || g.Close != 5 || g.High != 5.5 || g.Low != 2.5 || g.Volume != 3 {
+		t.Errorf("bad candle %+v", g)
+	}
+	if !g.CloseTime.Equal(g.OpenTime.Add(3*time.Hour - time.Millisecond)) {
+		t.Errorf("bad close time %v", g.CloseTime)
+	}
+}

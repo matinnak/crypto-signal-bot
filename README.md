@@ -28,6 +28,23 @@ desc: Oversold entries in an uptrend
 
 > 🇮🇷 راهنمای فارسی راه‌اندازی: [docs/SETUP_FA.md](docs/SETUP_FA.md)
 
+## Built-in strategy: BTC MTF MACD Trend-Pullback (3h)
+
+With `STRATEGY=mtf_macd` (the default in the GitHub Actions workflow) the bot runs only a Go
+port of a Pine Script strategy (`internal/mtfmacd`) and pushes signals to the admin:
+
+- **Chart** BTCUSDT 3h (built from 1h candles, aligned like TradingView). Binance USDT-M futures
+  data (`BTCUSDT.P`) is used when reachable, spot otherwise.
+- **Trend** previous closed 4h candle vs EMA(50) &nbsp;·&nbsp; **Entry** MACD(12,26,9) cross at a 3h close
+- **Stop** lowest low / highest high of 5 bars ∓ 0.25×ATR(14) &nbsp;·&nbsp; **Targets** TP1 1R (50%),
+  TP2 2R (50%), stop to break-even after TP1
+- One position at a time and daily/weekly loss guards: positions are simulated bar by bar with
+  TradingView's broker-emulator rules (intrabar path, gaps) so that signals match the chart.
+- Messages: new signal (entry, stop, targets), TP1 + break-even, trade closed (result in R).
+  Any message to the bot returns the current status and recent signals.
+
+> The strategy's own notes say it was **not validated out-of-sample**; use it for paper trading.
+
 ## Features
 
 - **Condition language** with a hand-written lexer, recursive-descent parser, type checker

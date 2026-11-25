@@ -61,6 +61,9 @@ type State struct {
 	Seeded       bool                 `json:"seeded"`        // default strategies were added once
 	Strategies   map[string]*Strategy `json:"strategies"`
 	Users        map[int64]*User      `json:"users"`
+	// Notified records events of the fixed strategy that were already sent
+	// (key -> Unix time sent), so each signal is delivered once.
+	Notified map[string]int64 `json:"notified,omitempty"`
 }
 
 // New returns an empty state.

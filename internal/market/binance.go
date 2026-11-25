@@ -17,9 +17,13 @@ import (
 // US-hosted runners) and needs no API key.
 const DefaultBinanceURL = "https://data-api.binance.vision"
 
-// Binance fetches spot candles from the Binance REST API.
+// DefaultFuturesURL is the Binance USDT-M futures REST endpoint (BTCUSDT.P on TradingView).
+const DefaultFuturesURL = "https://fapi.binance.com"
+
+// Binance fetches candles from the Binance REST API (spot or USDT-M futures).
 type Binance struct {
 	BaseURL string
+	Path    string // "/api/v3/klines" (spot) or "/fapi/v1/klines" (futures)
 	HTTP    *http.Client
 }
 
@@ -30,8 +34,19 @@ func NewBinance(baseURL string) *Binance {
 	}
 	return &Binance{
 		BaseURL: strings.TrimRight(baseURL, "/"),
+		Path:    "/api/v3/klines",
 		HTTP:    &http.Client{Timeout: 20 * time.Second},
 	}
+}
+
+// NewBinanceFutures returns a client for USDT-M perpetual futures candles.
+func NewBinanceFutures(baseURL string) *Binance {
+	if baseURL == "" {
+		baseURL = DefaultFuturesURL
+	}
+	b := NewBinance(baseURL)
+	b.Path = "/fapi/v1/klines"
+	return b
 }
 
 type binanceError struct {
@@ -45,7 +60,11 @@ func (b *Binance) Candles(ctx context.Context, symbol, interval string, limit in
 	q.Set("symbol", symbol)
 	q.Set("interval", interval)
 	q.Set("limit", strconv.Itoa(limit))
-	u := b.BaseURL + "/api/v3/klines?" + q.Encode()
+	path := b.Path
+	if path == "" {
+		path = "/api/v3/klines"
+	}
+	u := b.BaseURL + path + "?" + q.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {

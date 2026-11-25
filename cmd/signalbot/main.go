@@ -71,6 +71,22 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	if cfg.Strategy == "mtf_macd" {
+		f := newFixed(a, cfg)
+		switch *mode {
+		case "once":
+			err = f.runOnce(ctx)
+		case "serve":
+			err = f.serve(ctx, *every)
+		default:
+			logger.Fatalf("unknown -mode %q (use once or serve)", *mode)
+		}
+		if err != nil {
+			logger.Fatal(err)
+		}
+		return
+	}
+
 	switch *mode {
 	case "once":
 		err = a.runOnce(ctx)

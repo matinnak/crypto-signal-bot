@@ -87,3 +87,49 @@ func ClosedOnly(c []Candle, now time.Time) []Candle {
 	}
 	return c
 }
+
+// Aggregate combines consecutive candles into larger ones of length d, aligned
+// to the Unix epoch (so 3h candles open at 00:00, 03:00, ... UTC, like
+// TradingView). Only complete groups are returned; src must be closed candles
+// of one interval, oldest first.
+func Aggregate(src []Candle, d time.Duration) []Candle {
+	if len(src) == 0 {
+		return nil
+	}
+	step := src[0].CloseTime.Sub(src[0].OpenTime) + time.Millisecond
+	need := int(d / step)
+	if need < 1 {
+		return nil
+	}
+	ms := d.Milliseconds()
+	var out []Candle
+	var cur Candle
+	count := 0
+	curKey := int64(-1)
+	flush := func() {
+		if count == need {
+			cur.CloseTime = cur.OpenTime.Add(d - time.Millisecond)
+			out = append(out, cur)
+		}
+	}
+	for _, c := range src {
+		key := c.OpenTime.UnixMilli() / ms
+		if key != curKey {
+			flush()
+			curKey = key
+			cur = Candle{OpenTime: time.UnixMilli(key * ms).UTC(), Open: c.Open, High: c.High, Low: c.Low}
+			count = 0
+		}
+		if c.High > cur.High {
+			cur.High = c.High
+		}
+		if c.Low < cur.Low {
+			cur.Low = c.Low
+		}
+		cur.Close = c.Close
+		cur.Volume += c.Volume
+		count++
+	}
+	flush()
+	return out
+}
