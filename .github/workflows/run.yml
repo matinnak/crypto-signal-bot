@@ -2,7 +2,7 @@ name: Signal bot (hourly)
 
 on:
   schedule:
-    - cron: "7 * * * *" # every hour at :07 (minutes near :00 are often dropped by GitHub under load)
+    - cron: "7,37 * * * *" # twice an hour: if GitHub drops one run, the next catches up
   workflow_dispatch: # "Run workflow" button for an immediate run
 
 permissions:
