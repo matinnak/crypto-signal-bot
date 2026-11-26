@@ -6,51 +6,55 @@ import (
 
 	"github.com/matinnak/crypto-signal-bot/internal/config"
 	"github.com/matinnak/crypto-signal-bot/internal/market"
-	"github.com/matinnak/crypto-signal-bot/internal/mtfmacd"
+	"github.com/matinnak/crypto-signal-bot/internal/signals"
 	"github.com/matinnak/crypto-signal-bot/internal/telegram"
 )
 
-// fixed runs only the built-in BTCUSDT 3h "MTF MACD Trend-Pullback" strategy.
+// fixed runs only the built-in strategies (signals.All): BTC 3h, BNB/SOL/XRP 2h.
 // Signals go to the admin automatically; any message to the bot gets a status reply.
 type fixed struct {
 	*app
-	runner *mtfmacd.Runner
+	runner *signals.Runner
 }
 
 func newFixed(a *app, cfg *config.Config) *fixed {
-	return &fixed{app: a, runner: &mtfmacd.Runner{
+	return &fixed{app: a, runner: &signals.Runner{
+		Specs:   signals.All,
 		Futures: market.NewBinanceFutures(cfg.FuturesURL),
 		Spot:    market.NewBinance(cfg.BinanceURL),
 		Notify:  a.tg,
 		ChatID:  cfg.AdminChatID,
 		Loc:     cfg.Location,
 		Log:     a.log,
-		Params:  mtfmacd.Default(),
 	}}
 }
 
-func (f *fixed) evaluate(ctx context.Context) *mtfmacd.Snapshot {
-	snap, err := f.runner.Evaluate(ctx)
-	if err != nil {
-		f.log.Printf("evaluate: %v", err)
-		return nil
-	}
-	last := snap.Bars[len(snap.Bars)-1]
-	f.log.Printf("data: %s | %d 3h bars | last closed 3h bar opened %s UTC, close %.1f",
-		snap.Source, len(snap.Bars), last.OpenTime.Format("2006-01-02 15:04"), last.Close)
-	shown := 0
-	for i := len(snap.Events) - 1; i >= 0 && shown < 8; i-- {
-		e := snap.Events[i]
-		if e.Kind == mtfmacd.Signal {
-			f.log.Printf("recent signal: %s UTC long=%v entry=%.1f stop=%.1f tp1=%.1f tp2=%.1f",
-				e.Bar.OpenTime.Add(mtfmacd.Bar).Format("2006-01-02 15:04"), e.Long, e.Entry, e.Stop, e.TP1, e.TP2)
-			shown++
+func (f *fixed) evaluate(ctx context.Context) []*signals.Snapshot {
+	snaps := f.runner.Evaluate(ctx)
+	for _, snap := range snaps {
+		s := snap.Spec
+		if snap.Err != nil {
+			f.log.Printf("%s: evaluate failed: %v", s.ID, snap.Err)
+			continue
+		}
+		bars := snap.Result.Bars
+		last := bars[len(bars)-1]
+		f.log.Printf("%s: %s | %d bars | last closed bar opened %s UTC, close %g",
+			s.ID, snap.Source, len(bars), last.OpenTime.Format("2006-01-02 15:04"), last.Close)
+		shown := 0
+		for i := len(snap.Result.Events) - 1; i >= 0 && shown < 5; i-- {
+			e := snap.Result.Events[i]
+			if e.Kind == signals.Signal {
+				f.log.Printf("%s: recent signal: close %s UTC long=%v entry=%g stop=%g targets=%v",
+					s.ID, e.Bar.OpenTime.Add(s.Bar).Format("2006-01-02 15:04"), e.Long, e.Entry, e.Stop, e.Targets)
+				shown++
+			}
 		}
 	}
-	return snap
+	return snaps
 }
 
-func (f *fixed) reply(ctx context.Context, ups []telegram.Update, snap *mtfmacd.Snapshot) {
+func (f *fixed) reply(ctx context.Context, ups []telegram.Update, snap []*signals.Snapshot) {
 	for _, u := range ups {
 		if u.UpdateID >= f.st.UpdateOffset {
 			f.st.UpdateOffset = u.UpdateID + 1
@@ -69,10 +73,7 @@ func (f *fixed) reply(ctx context.Context, ups []telegram.Update, snap *mtfmacd.
 	}
 }
 
-func (f *fixed) notify(ctx context.Context, snap *mtfmacd.Snapshot) {
-	if snap == nil {
-		return
-	}
+func (f *fixed) notify(ctx context.Context, snap []*signals.Snapshot) {
 	n, err := f.runner.NotifyNew(ctx, snap, f.st)
 	if err != nil {
 		f.log.Printf("notify: %v", err)
@@ -101,7 +102,7 @@ func (f *fixed) runOnce(ctx context.Context) error {
 }
 
 func (f *fixed) serve(ctx context.Context, every time.Duration) error {
-	var snap *mtfmacd.Snapshot
+	var snap []*signals.Snapshot
 	var last time.Time
 	for ctx.Err() == nil {
 		if time.Since(last) >= every {

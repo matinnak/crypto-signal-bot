@@ -21,7 +21,7 @@ type Config struct {
 	Location      *time.Location
 	OpenAccess    bool
 	OnCI          bool   // running inside GitHub Actions
-	Strategy      string // "mtf_macd" = run only the built-in BTC 3h strategy
+	Strategy      string // "builtin" = run only the built-in strategies (BTC 3h, BNB/SOL/XRP 2h)
 	FuturesURL    string // Binance USDT-M futures endpoint (fixed strategy)
 }
 
@@ -33,7 +33,7 @@ type Config struct {
 //	BINANCE_BASE_URL  optional, default https://data-api.binance.vision
 //	TIMEZONE          optional, default Asia/Tehran
 //	OPEN_ACCESS       optional, "true" lets anyone use the bot without approval
-//	STRATEGY          optional, "mtf_macd" runs only the built-in BTCUSDT 3h strategy
+//	STRATEGY          optional, "builtin" runs only the built-in strategies (internal/signals)
 func FromEnv() (*Config, error) {
 	c := &Config{
 		TelegramToken: strings.TrimSpace(os.Getenv("TELEGRAM_TOKEN")),
@@ -56,8 +56,11 @@ func FromEnv() (*Config, error) {
 	} else {
 		c.AdminChatID = id
 	}
-	if c.Strategy != "" && c.Strategy != "mtf_macd" {
-		errs = append(errs, fmt.Errorf("unknown STRATEGY %q (supported: mtf_macd)", c.Strategy))
+	if c.Strategy == "mtf_macd" { // older name, kept for compatibility
+		c.Strategy = "builtin"
+	}
+	if c.Strategy != "" && c.Strategy != "builtin" {
+		errs = append(errs, fmt.Errorf("unknown STRATEGY %q (supported: builtin)", c.Strategy))
 	}
 	if c.OnCI && c.StateKey == "" {
 		errs = append(errs, errors.New("STATE_KEY must be set on GitHub Actions so the saved state is encrypted"))

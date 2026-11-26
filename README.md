@@ -28,22 +28,28 @@ desc: Oversold entries in an uptrend
 
 > 🇮🇷 راهنمای فارسی راه‌اندازی: [docs/SETUP_FA.md](docs/SETUP_FA.md)
 
-## Built-in strategy: BTC MTF MACD Trend-Pullback (3h)
+## Built-in strategies
 
-With `STRATEGY=mtf_macd` (the default in the GitHub Actions workflow) the bot runs only a Go
-port of a Pine Script strategy (`internal/mtfmacd`) and pushes signals to the admin:
+With `STRATEGY=builtin` (the default in the GitHub Actions workflow) the bot runs only Go ports
+of four Pine Script strategies (`internal/signals`) and pushes their signals to the admin:
 
-- **Chart** BTCUSDT 3h (built from 1h candles, aligned like TradingView). Binance USDT-M futures
-  data (`BTCUSDT.P`) is used when reachable, spot otherwise.
-- **Trend** previous closed 4h candle vs EMA(50) &nbsp;·&nbsp; **Entry** MACD(12,26,9) cross at a 3h close
-- **Stop** lowest low / highest high of 5 bars ∓ 0.25×ATR(14) &nbsp;·&nbsp; **Targets** TP1 1R (50%),
-  TP2 2R (50%), stop to break-even after TP1
-- One position at a time and daily/weekly loss guards: positions are simulated bar by bar with
-  TradingView's broker-emulator rules (intrabar path, gaps) so that signals match the chart.
-- Messages: new signal (entry, stop, targets), TP1 + break-even, trade closed (result in R).
-  Any message to the bot returns the current status and recent signals.
+| Symbol | TF | Strategy | Entry | Stop | Target |
+|---|---|---|---|---|---|
+| BTCUSDT | 3h | MTF MACD Trend-Pullback | MACD cross with 4h EMA50 trend, market | 5-bar swing ∓ 0.25×ATR | 1R (50%) + 2R (50%), BE after TP1 |
+| BNBUSDT | 2h | BOS Retest | close beyond a 5/2 swing, **limit** at the level (6 bars) | opposite swing, ATR-bounded | 2.5R |
+| SOLUSDT | 2h | Stoch Reversion | Stoch(14,3,3) %K/%D cross out of 20/80 while ADX(14) < 20, market | ∓ 1.5×ATR | 1.5R |
+| XRPUSDT | 2h | MACD Momentum | MACD(12,26,9) cross, market | ∓ 2×ATR | 2.5R |
 
-> The strategy's own notes say it was **not validated out-of-sample**; use it for paper trading.
+- 3h candles are built from 1h candles, aligned like TradingView. Binance USDT-M futures data
+  (`.P`) is used when reachable, spot otherwise.
+- One order or position at a time and daily/weekly loss guards: orders and positions are simulated
+  bar by bar with TradingView's broker-emulator rules (next-open fills, limit fills along the
+  intrabar path, gaps, partial targets, break-even) so that signals match the chart.
+- Messages: new signal (entry, stop, targets), limit filled / cancelled, TP1 + break-even, trade
+  closed (result in R). Any message to the bot returns the status of all four strategies.
+
+> The scripts' own notes say none of them is validated out-of-sample (BNB was rejected); use them
+> for paper trading.
 
 ## Features
 

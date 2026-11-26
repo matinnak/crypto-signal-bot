@@ -40,7 +40,7 @@ jobs:
           TIMEZONE: ${{ vars.TIMEZONE }}
           BINANCE_BASE_URL: ${{ vars.BINANCE_BASE_URL }}
           OPEN_ACCESS: ${{ vars.OPEN_ACCESS }}
-          STRATEGY: mtf_macd # only the BTCUSDT 3h MTF MACD Trend-Pullback strategy
+          STRATEGY: builtin # BTC 3h MTF MACD, BNB 2h BOS Retest, SOL 2h Stoch Reversion, XRP 2h MACD Momentum
         run: go run ./cmd/signalbot -mode once -state state.enc
 
       - name: Save state

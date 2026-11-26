@@ -71,7 +71,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if cfg.Strategy == "mtf_macd" {
+	if cfg.Strategy == "builtin" {
 		f := newFixed(a, cfg)
 		switch *mode {
 		case "once":
