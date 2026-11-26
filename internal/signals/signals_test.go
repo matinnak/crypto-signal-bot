@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	ind "github.com/matinnak/crypto-signal-bot/internal/indicator"
 	"github.com/matinnak/crypto-signal-bot/internal/market"
 	"github.com/matinnak/crypto-signal-bot/internal/store"
 )
@@ -159,6 +160,9 @@ func synthetic(n int, step time.Duration, trend float64) []market.Candle {
 	for i := range out {
 		x := float64(i)
 		c := 100 + trend*x + 6*math.Sin(x/5) + 2.5*math.Sin(x/1.7) + 1.2*math.Sin(x*2.9)
+		if i%97 >= 90 { // occasional sharp moves (breakouts)
+			c += 2.2 * float64(i%97-89) * math.Copysign(1, math.Sin(x/40))
+		}
 		o := t0.Add(time.Duration(i) * step)
 		out[i] = market.Candle{OpenTime: o, CloseTime: o.Add(step - time.Millisecond), Open: prev,
 			High: math.Max(prev, c) + 0.8, Low: math.Min(prev, c) - 0.8, Close: c, Volume: 1}
@@ -288,11 +292,11 @@ func TestRunnerFallbackNotifyOnceAndStatus(t *testing.T) {
 	snk := &sink{}
 	r := &Runner{Specs: All, Futures: failMarket{}, Spot: fakeMarket{}, Notify: snk, ChatID: 1}
 	snaps := r.Evaluate(context.Background())
-	if len(snaps) != 4 {
+	if len(snaps) != len(All) {
 		t.Fatalf("snapshots %d", len(snaps))
 	}
 	for _, s := range snaps {
-		if s.Err != nil || !strings.Contains(s.Source, "Spot") {
+		if s.Err != nil || !strings.Contains(s.Source, "Spot") || (s.Spec.SpotOnly && strings.Contains(s.Source, "فیوچرز")) {
 			t.Fatalf("%s: err %v source %q", s.Spec.ID, s.Err, s.Source)
 		}
 	}
@@ -311,7 +315,7 @@ func TestRunnerFallbackNotifyOnceAndStatus(t *testing.T) {
 		t.Fatalf("re-sent %d", again)
 	}
 	status := r.StatusText(snaps)
-	for _, sym := range []string{"BTCUSDT | 3h", "BNBUSDT | 2h", "SOLUSDT | 2h", "XRPUSDT | 2h"} {
+	for _, sym := range []string{"BTCUSDT | 3h", "BNBUSDT | 2h", "SOLUSDT | 2h", "XRPUSDT | 2h", "ETHUSDT | 1h"} {
 		if !strings.Contains(status, sym) {
 			t.Errorf("status missing %s", sym)
 		}
@@ -351,4 +355,57 @@ func TestPrice(t *testing.T) {
 			t.Errorf("Price(%v,%d)=%q want %q", c.v, c.d, got, c.want)
 		}
 	}
+}
+
+func TestTimeExitClosesAtNextOpen(t *testing.T) {
+	bars := flatBars(20, 100)
+	bars[3].Open = 100 // fill
+	bars[9].Open = 103 // time-exit fill: 5 bars after the fill (bar 3) -> ordered at close of 8
+	st := newSetup(len(bars))
+	st.Long[2], st.RefLong[2], st.StopLong[2] = true, 100, 90 // R=10, target 120 never reached
+	st.Long[9], st.RefLong[9], st.StopLong[9] = true, 100, 90 // flat again at bar 9's close
+	spec := &Spec{ID: "time", Bar: 2 * time.Hour, Targets: []Target{{2, 100}}, MaxBars: 5, Risk: DefaultRisk}
+	res := Simulate(spec, bars, nil, st)
+	var got []string
+	for _, e := range res.Events {
+		got = append(got, string(e.Kind)+"@"+e.Bar.OpenTime.Format("15"))
+	}
+	// trade 1: fill bar 3, time exit ordered at close of bar 8, filled at bar 9's open (18h);
+	// trade 2: signal bar 9, fill bar 10, time exit filled at bar 16's open (08h next day).
+	if strings.Join(got, ",") != "signal@04,exit@18,signal@18,exit@08" {
+		t.Fatalf("events %v", got)
+	}
+	ex := res.Events[1]
+	if ex.ExitReason != "time" || !near(ex.ResultR, 0.3) {
+		t.Fatalf("exit %+v", ex)
+	}
+	msg := (&Runner{}).FormatEvent(ETHBBBreakout, ex, "")
+	if !strings.Contains(msg, "خروج زمانی بعد از 72 کندل") {
+		t.Errorf("exit message: %s", msg)
+	}
+}
+
+func TestETHZScore(t *testing.T) {
+	// Flat prices then a jump: Z is far above 2.75 on the jump bar only.
+	bars := flatBars(60, 100)
+	for i := range bars {
+		bars[i].Close = 100 + 0.1*math.Sin(float64(i))
+		bars[i].Open = bars[i].Close
+	}
+	bars[50].Close, bars[50].High = 103, 103.5
+	st := ETHBBBreakout.Build(bars, nil)
+	if !st.Long[50] || st.Short[50] || st.Long[49] {
+		t.Fatalf("long50=%v short50=%v long49=%v", st.Long[50], st.Short[50], st.Long[49])
+	}
+	if !near(st.StopLong[50], 103-3*indATR(bars)[50]) {
+		t.Errorf("stop %v", st.StopLong[50])
+	}
+	if !strings.Contains(st.Note(50, true), "Z-score") {
+		t.Errorf("note %q", st.Note(50, true))
+	}
+}
+
+func indATR(bars []market.Candle) []float64 {
+	_, h, l, c := series(bars)
+	return ind.ATR(h, l, c, 14)
 }

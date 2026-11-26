@@ -89,7 +89,7 @@ func (r *Runner) Evaluate(ctx context.Context) []*Snapshot {
 		snap := &Snapshot{Spec: s, At: now}
 		var bars, h4, d1 []market.Candle
 		var err error
-		if useFutures {
+		if useFutures && !s.SpotOnly {
 			snap.Source = "Binance Futures (" + s.Symbol + ".P)"
 			bars, h4, d1, err = fetch(ctx, r.Futures, s, now)
 			if err != nil {
@@ -97,7 +97,10 @@ func (r *Runner) Evaluate(ctx context.Context) []*Snapshot {
 				useFutures = false
 			}
 		}
-		if !useFutures {
+		if s.SpotOnly {
+			snap.Source = "Binance Spot (" + s.Symbol + ")"
+			bars, h4, d1, err = fetch(ctx, r.Spot, s, now)
+		} else if !useFutures {
 			snap.Source = "Binance Spot (" + s.Symbol + ") — دیتای فیوچرز در دسترس نبود"
 			bars, h4, d1, err = fetch(ctx, r.Spot, s, now)
 		}
@@ -231,6 +234,9 @@ func (r *Runner) FormatEvent(s *Spec, e Event, source string) string {
 		if s.UseBE {
 			b.WriteString("بعد از تارگت ۱، حد ضرر به نقطه‌ی ورود منتقل می‌شود.\n")
 		}
+		if s.MaxBars > 0 {
+			fmt.Fprintf(&b, "خروج زمانی: اگر تا %d کندل به حد ضرر یا تارگت نرسید، بسته می‌شود.\n", s.MaxBars)
+		}
 		b.WriteString("\n")
 		if e.Note != "" {
 			b.WriteString(e.Note + "\n")
@@ -268,6 +274,7 @@ func (r *Runner) FormatEvent(s *Spec, e Event, source string) string {
 			"target":    "🎯 تارگت خورد",
 			"stop":      "🛑 حد ضرر خورد",
 			"breakeven": "⚖️ بعد از تارگت ۱ در نقطه‌ی ورود بسته شد",
+			"time":      fmt.Sprintf("⏱ خروج زمانی بعد از %d کندل", s.MaxBars),
 		}[e.ExitReason]
 		if e.ExitReason == "target" && len(e.Targets) > 1 {
 			reason = "🎯 تارگت نهایی خورد"

@@ -22,6 +22,8 @@ type Spec struct {
 	Targets    []Target
 	UseBE      bool // move stop to break-even after the first target
 	LimitValid int  // > 0: limit entry valid for this many bars; 0: market entry
+	MaxBars    int  // > 0: close the position at market after this many bars
+	SpotOnly   bool // the script is written for the spot chart, not the .P perpetual
 	Risk       Risk
 
 	Rules   string // short Persian description
@@ -207,5 +209,35 @@ var XRPMACDMomentum = &Spec{
 	},
 }
 
+// ETHBBBreakout — "ETH 1h BB Breakout Momentum", ETHUSDT (spot) 1h.
+var ETHBBBreakout = &Spec{
+	ID: "eth_bb_breakout", Name: "ETH 1h BB Breakout Momentum",
+	Symbol: "ETHUSDT", Interval: "1h", Bar: time.Hour, Decimals: 2, SpotOnly: true,
+	Targets: []Target{{2, 100}}, MaxBars: 72, // TP 6×ATR with a 3×ATR stop = 2R
+	Risk: Risk{RiskPct: 1, MaxLev: 1, CommissionPct: 0.05, InitialCapital: 10000},
+	Rules: "Z-score(25) = (close − SMA25) / انحراف معیار | خرید: Z > 2.75 | فروش: Z < −2.75 | " +
+		"ورود: مارکت | حد ضرر: ∓ 3×ATR | تارگت: 6×ATR (2R) | خروج زمانی بعد از ۷۲ کندل",
+	Warning: "نتیجه‌ی آزمون خارج از نمونه در کد ذکر نشده — فقط معامله‌ی آزمایشی",
+	Build: func(bars, _ []market.Candle) Setup {
+		_, h, l, c := series(bars)
+		st := newSetup(len(bars))
+		const length, k = 25, 2.75
+		basis := ind.SMA(c, length)
+		sd := ind.Stdev(c, length) // population; the script rescales to sample stdev
+		atr := ind.ATR(h, l, c, 14)
+		z := make([]float64, len(bars))
+		for i := range bars {
+			z[i] = (c[i] - basis[i]) / (sd[i] * math.Sqrt(length/(length-1.0)))
+			atrStops(&st, c, atr, 3, i)
+			st.Long[i] = z[i] > k
+			st.Short[i] = z[i] < -k
+		}
+		st.Note = func(i int, long bool) string {
+			return fmt.Sprintf("Z-score: %.2f (آستانه ±2.75)", z[i])
+		}
+		return st
+	},
+}
+
 // All is the list of strategies the bot runs.
-var All = []*Spec{BTCMTFMACD, BNBBOSRetest, SOLStochReversion, XRPMACDMomentum}
+var All = []*Spec{BTCMTFMACD, BNBBOSRetest, SOLStochReversion, XRPMACDMomentum, ETHBBBreakout}

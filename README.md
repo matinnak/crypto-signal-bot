@@ -31,7 +31,7 @@ desc: Oversold entries in an uptrend
 ## Built-in strategies
 
 With `STRATEGY=builtin` (the default in the GitHub Actions workflow) the bot runs only Go ports
-of four Pine Script strategies (`internal/signals`) and pushes their signals to the admin:
+of five Pine Script strategies (`internal/signals`) and pushes their signals to the admin:
 
 | Symbol | TF | Strategy | Entry | Stop | Target |
 |---|---|---|---|---|---|
@@ -39,6 +39,7 @@ of four Pine Script strategies (`internal/signals`) and pushes their signals to 
 | BNBUSDT | 2h | BOS Retest | close beyond a 5/2 swing, **limit** at the level (6 bars) | opposite swing, ATR-bounded | 2.5R |
 | SOLUSDT | 2h | Stoch Reversion | Stoch(14,3,3) %K/%D cross out of 20/80 while ADX(14) < 20, market | ∓ 1.5×ATR | 1.5R |
 | XRPUSDT | 2h | MACD Momentum | MACD(12,26,9) cross, market | ∓ 2×ATR | 2.5R |
+| ETHUSDT (spot) | 1h | BB Breakout Momentum | Z-score(25) beyond ±2.75, market | ∓ 3×ATR | 6×ATR (2R), time exit after 72 bars |
 
 - 3h candles are built from 1h candles, aligned like TradingView. Binance USDT-M futures data
   (`.P`) is used when reachable, spot otherwise.
@@ -46,7 +47,7 @@ of four Pine Script strategies (`internal/signals`) and pushes their signals to 
   bar by bar with TradingView's broker-emulator rules (next-open fills, limit fills along the
   intrabar path, gaps, partial targets, break-even) so that signals match the chart.
 - Messages: new signal (entry, stop, targets), limit filled / cancelled, TP1 + break-even, trade
-  closed (result in R). Any message to the bot returns the status of all four strategies.
+  closed (result in R). Any message to the bot returns the status of every strategy.
 
 > The scripts' own notes say none of them is validated out-of-sample (BNB was rejected); use them
 > for paper trading.

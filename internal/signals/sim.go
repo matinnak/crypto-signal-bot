@@ -115,6 +115,8 @@ type trade struct {
 	pnl       float64
 	reason    string
 	filled    bool
+	fillIdx   int  // bar index of the entry fill
+	closeNext bool // time exit ordered at a bar close: close at the next open
 	strong    bool
 	note      string
 }
@@ -294,16 +296,21 @@ func Simulate(s *Spec, bars, d1 []market.Candle, st Setup) Result {
 		// --- intrabar: fill the pending order, then run exits.
 		if pending != nil {
 			if s.LimitValid == 0 {
-				pending.fill, pending.filled = b.Open, true
+				pending.fill, pending.filled, pending.fillIdx = b.Open, true, i
 				pos, pending, filledNow = pending, nil, true
 				cash -= pos.q * pos.fill * fee
 				runExits(pos, path, fee, &cash)
 			} else if px, rest, ok := limitFill(pending.long, pending.ref, path); ok {
-				pending.fill, pending.filled = px, true
+				pending.fill, pending.filled, pending.fillIdx = px, true, i
 				pos, pending, filledNow = pending, nil, true
 				cash -= pos.q * pos.fill * fee
 				runExits(pos, rest, fee, &cash)
 			}
+		} else if pos != nil && pos.closeNext {
+			// strategy.close_all() at the previous close fills at this open.
+			pos.pnl += pos.dir() * pos.rem * (b.Open - pos.fill)
+			cash += pos.dir()*pos.rem*(b.Open-pos.fill) - pos.rem*b.Open*fee
+			pos.rem, pos.reason = 0, "time"
 		} else if pos != nil {
 			runExits(pos, path, fee, &cash)
 		}
@@ -342,6 +349,8 @@ func Simulate(s *Spec, bars, d1 []market.Candle, st Setup) Result {
 					Stop: pos.stop, Targets: pos.targets(), ExitReason: pos.reason,
 					ResultR: pos.pnl / (pos.q * pos.risk), SignalBar: pos.signalBar})
 				pos = nil
+			} else if s.MaxBars > 0 && !pos.closeNext && i-pos.fillIdx >= s.MaxBars {
+				pos.closeNext = true // time stop: market close at the next open
 			} else if s.UseBE && pos.legs[0].done && !pos.beDone {
 				pos.beDone = true
 				if pos.long {
