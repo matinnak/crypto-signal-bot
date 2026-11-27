@@ -409,3 +409,15 @@ func indATR(bars []market.Candle) []float64 {
 	_, h, l, c := series(bars)
 	return ind.ATR(h, l, c, 14)
 }
+
+func TestLateNote(t *testing.T) {
+	if lateNote(10*time.Minute) != "" {
+		t.Error("short delay should have no note")
+	}
+	if n := lateNote(4*time.Hour + 40*time.Minute); !strings.Contains(n, "4 ساعت و 40 دقیقه") {
+		t.Errorf("note %q", n)
+	}
+	if n := lateNote(5 * time.Hour); !strings.Contains(n, "5 ساعت تأخیر") {
+		t.Errorf("note %q", n)
+	}
+}

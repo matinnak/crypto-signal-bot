@@ -121,11 +121,28 @@ func (r *Runner) Evaluate(ctx context.Context) []*Snapshot {
 }
 
 // staleAfter: older events are never sent (first run, or after an outage).
+// It is generous because GitHub's scheduler can skip runs for hours; a late
+// signal is still sent, marked with its delay.
 func staleAfter(bar time.Duration) time.Duration {
-	if d := 2*bar + time.Hour; d > 7*time.Hour {
+	if d := 3 * bar; d > 24*time.Hour {
 		return d
 	}
-	return 7 * time.Hour
+	return 24 * time.Hour
+}
+
+func lateNote(delay time.Duration) string {
+	if delay < 50*time.Minute {
+		return ""
+	}
+	d := delay.Round(time.Minute)
+	h, m := int(d.Hours()), int(d.Minutes())%60
+	txt := fmt.Sprintf("%d ساعت", h)
+	if h == 0 {
+		txt = fmt.Sprintf("%d دقیقه", m)
+	} else if m > 0 {
+		txt += fmt.Sprintf(" و %d دقیقه", m)
+	}
+	return "\n\n⏰ این پیام با " + txt + " تأخیر ارسال شد (اجرای ربات دیر انجام شد). قبل از عمل، قیمت فعلی را بررسی کنید."
 }
 
 // NotifyNew sends recent events that were not sent before, recording them in st.
@@ -142,14 +159,15 @@ func (r *Runner) NotifyNew(ctx context.Context, snaps []*Snapshot, st *store.Sta
 			continue
 		}
 		for _, e := range snap.Result.Events {
-			if snap.At.Sub(e.Bar.OpenTime.Add(snap.Spec.Bar)) > staleAfter(snap.Spec.Bar) {
+			delay := snap.At.Sub(e.Bar.OpenTime.Add(snap.Spec.Bar))
+			if delay > staleAfter(snap.Spec.Bar) {
 				continue
 			}
 			key := snap.Spec.ID + ":" + string(e.Kind) + ":" + strconv.FormatInt(e.Bar.OpenTime.UnixMilli(), 10)
 			if _, done := st.Notified[key]; done {
 				continue
 			}
-			if err := r.Notify.SendMessage(ctx, r.ChatID, r.FormatEvent(snap.Spec, e, snap.Source)); err != nil {
+			if err := r.Notify.SendMessage(ctx, r.ChatID, r.FormatEvent(snap.Spec, e, snap.Source)+lateNote(delay)); err != nil {
 				errs = append(errs, err)
 				continue
 			}
